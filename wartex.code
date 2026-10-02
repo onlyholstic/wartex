@@ -1,0 +1,805 @@
+'use client';
+
+import React, { useEffect, useMemo, useState } from 'react';
+
+type Tab = 'ENTROPY' | 'ATTACK_DEFENSE' | 'PHISHING';
+type HashAlgorithm = 'MD5' | 'ARGON2';
+type AttackType = 'DDoS' | 'SQLi' | 'MitM';
+
+interface PhishingResult {
+  score: number;
+  risk: 'KRİTİK' | 'YÜKSEK' | 'DÜŞÜK';
+  reasons: string[];
+}
+
+function calculateEntropy(password: string) {
+  if (!password) {
+    return {
+      bits: 0,
+      length: 0,
+      poolSize: 0,
+    };
+  }
+
+  let poolSize = 0;
+
+  if (/[a-z]/.test(password)) poolSize += 26;
+  if (/[A-Z]/.test(password)) poolSize += 26;
+  if (/[0-9]/.test(password)) poolSize += 10;
+  if (/[^a-zA-Z0-9]/.test(password)) poolSize += 33;
+
+  const bits = password.length * Math.log2(poolSize || 1);
+
+  return {
+    bits: Math.round(bits * 10) / 10,
+    length: password.length,
+    poolSize,
+  };
+}
+
+function formatCrackTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds > 1e20) {
+    return 'Milyarlarca yıl';
+  }
+
+  if (seconds < 1) return 'Anında (< 1 saniye)';
+  if (seconds < 60) return `${Math.round(seconds)} saniye`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} dakika`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)} saat`;
+  if (seconds < 31536000) return `${Math.round(seconds / 86400)} gün`;
+  if (seconds < 31536000000) {
+    return `${Math.round(seconds / 31536000)} yıl`;
+  }
+
+  return `${(seconds / 31536000 / 1e9).toFixed(2)} milyar yıl`;
+}
+
+export default function CyberLabDashboard() {
+  const [activeTab, setActiveTab] = useState<Tab>('ENTROPY');
+
+  // =========================
+  // PAROLA LAB
+  // =========================
+
+  const [password, setPassword] = useState('CyberP@ss2026!');
+  const [algo, setAlgo] = useState<HashAlgorithm>('MD5');
+
+  const entropy = useMemo(
+    () => calculateEntropy(password),
+    [password]
+  );
+
+  const speedSingleGpu = algo === 'MD5' ? 15e9 : 100;
+  const speedRigGpu = algo === 'MD5' ? 2.5e12 : 15000;
+  const speedDatacenter = algo === 'MD5' ? 300e12 : 2e6;
+
+  const totalCombinations =
+    entropy.poolSize > 0
+      ? Math.pow(entropy.poolSize, entropy.length)
+      : 0;
+
+  const timeSingleGpu =
+    totalCombinations > 0
+      ? totalCombinations / 2 / speedSingleGpu
+      : 0;
+
+  const timeRigGpu =
+    totalCombinations > 0
+      ? totalCombinations / 2 / speedRigGpu
+      : 0;
+
+  const timeDatacenter =
+    totalCombinations > 0
+      ? totalCombinations / 2 / speedDatacenter
+      : 0;
+
+  // =========================
+  // SALDIRI / SAVUNMA LAB
+  // =========================
+
+  const [attackType, setAttackType] =
+    useState<AttackType>('DDoS');
+
+  const [intensity, setIntensity] = useState(60);
+  const [defense, setDefense] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
+
+  useEffect(() => {
+    setLogs([]);
+  }, [attackType, defense]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date().toLocaleTimeString('tr-TR');
+
+      let logMsg = '';
+
+      if (attackType === 'DDoS') {
+        logMsg = defense
+          ? `[${now}] WAF: RATE-LIMIT AKTİF. ${
+              intensity * 120
+            } bot isteği engellendi.`
+          : `[${now}] UYARI: SYN Flood tespit edildi! Sunucu CPU: %${Math.min(
+              99,
+              intensity + 30
+            )}`;
+      }
+
+      if (attackType === 'SQLi') {
+        logMsg = defense
+          ? `[${now}] PREPARED STATEMENT: Şüpheli sorgu parametre olarak engellendi.`
+          : `[${now}] ZAFİYET: Kullanıcı girdisi doğrudan SQL sorgusuna eklendi.`;
+      }
+
+      if (attackType === 'MitM') {
+        logMsg = defense
+          ? `[${now}] TLS 1.3: Şifreli paket iletildi. İçerik okunamıyor.`
+          : `[${now}] MITM UYARISI: Şifrelenmemiş HTTP trafiği yakalanabilir.`;
+      }
+
+      setLogs((previous) => [
+        logMsg,
+        ...previous.slice(0, 7),
+      ]);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [attackType, intensity, defense]);
+
+  // =========================
+  // PHISHING LAB
+  // =========================
+
+  const [testUrl, setTestUrl] = useState(
+    'https://instagram-verify-account.xyz/login'
+  );
+
+  const [phishingResult, setPhishingResult] =
+    useState<PhishingResult | null>(null);
+
+  const analyzePhishing = () => {
+    const url = testUrl.toLowerCase().trim();
+
+    let score = 0;
+    const reasons: string[] = [];
+
+    if (
+      url.includes('verify') ||
+      url.includes('login') ||
+      url.includes('secure') ||
+      url.includes('account')
+    ) {
+      score += 25;
+
+      reasons.push(
+        'Kimlik doğrulama veya hesap güvenliği çağrışımı yapan anahtar kelimeler içeriyor.'
+      );
+    }
+
+    if (
+      url.includes('.xyz') ||
+      url.includes('.top') ||
+      url.includes('.click')
+    ) {
+      score += 30;
+
+      reasons.push(
+        'Şüpheli veya kötüye kullanımda sık görülebilen TLD kullanılmış.'
+      );
+    }
+
+    if (
+      url.includes('instagram-') ||
+      url.includes('facebook-') ||
+      url.includes('google-') ||
+      url.includes('microsoft-')
+    ) {
+      score += 35;
+
+      reasons.push(
+        'Tanınmış bir markayı taklit etmeye benzeyen alan adı yapısı tespit edildi.'
+      );
+    }
+
+    if (
+      url.includes('@') ||
+      url.includes('xn--')
+    ) {
+      score += 20;
+
+      reasons.push(
+        'URL içerisinde ek kimlik gizleme veya homograph göstergesi bulunuyor.'
+      );
+    }
+
+    score = Math.min(score, 100);
+
+    const risk: PhishingResult['risk'] =
+      score >= 70
+        ? 'KRİTİK'
+        : score >= 40
+        ? 'YÜKSEK'
+        : 'DÜŞÜK';
+
+    setPhishingResult({
+      score,
+      risk,
+      reasons,
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+
+      {/* HEADER */}
+
+      <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-900/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4">
+
+          <div className="flex items-center gap-3">
+
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500 bg-emerald-500/10 text-xl">
+              ⚡
+            </div>
+
+            <div>
+              <h1 className="text-xl font-bold tracking-wider text-white">
+                CYBERLAB{' '}
+                <span className="rounded border border-emerald-800 bg-emerald-950 px-2 py-0.5 text-xs text-emerald-400">
+                  v2.6
+                </span>
+              </h1>
+
+              <p className="text-xs text-slate-400">
+                Etkileşimli Siber Güvenlik Laboratuvarı
+              </p>
+            </div>
+
+          </div>
+
+          {/* NAV */}
+
+          <nav className="flex max-w-full overflow-x-auto rounded-lg border border-slate-800 bg-slate-950 p-1">
+
+            <button
+              onClick={() => setActiveTab('ENTROPY')}
+              className={`whitespace-nowrap rounded-md px-3 py-2 text-xs transition sm:text-sm ${
+                activeTab === 'ENTROPY'
+                  ? 'bg-emerald-500 font-semibold text-slate-950'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🔐 Parola & GPU
+            </button>
+
+            <button
+              onClick={() => setActiveTab('ATTACK_DEFENSE')}
+              className={`whitespace-nowrap rounded-md px-3 py-2 text-xs transition sm:text-sm ${
+                activeTab === 'ATTACK_DEFENSE'
+                  ? 'bg-emerald-500 font-semibold text-slate-950'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🛡️ Saldırı & Savunma
+            </button>
+
+            <button
+              onClick={() => setActiveTab('PHISHING')}
+              className={`whitespace-nowrap rounded-md px-3 py-2 text-xs transition sm:text-sm ${
+                activeTab === 'PHISHING'
+                  ? 'bg-emerald-500 font-semibold text-slate-950'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🎣 Phishing
+            </button>
+
+          </nav>
+
+        </div>
+      </header>
+
+      {/* MAIN */}
+
+      <main className="mx-auto max-w-7xl px-4 py-8">
+
+        {/* =========================
+            ENTROPY
+        ========================= */}
+
+        {activeTab === 'ENTROPY' && (
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+
+            {/* SOL PANEL */}
+
+            <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+
+              <h2 className="mb-6 border-b border-slate-800 pb-3 text-lg font-semibold text-emerald-400">
+                Parola Girdi Testi
+              </h2>
+
+              <div className="space-y-6">
+
+                <div>
+                  <label className="mb-2 block text-xs text-slate-400">
+                    Test Edilecek Parola
+                  </label>
+
+                  <input
+                    type="text"
+                    value={password}
+                    onChange={(e) =>
+                      setPassword(e.target.value)
+                    }
+                    placeholder="Bir parola girin..."
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 font-mono text-sm text-emerald-300 outline-none transition focus:border-emerald-500"
+                  />
+
+                  <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+                    🔒 Parola bu demo tarafından herhangi bir sunucuya
+                    gönderilmez. Hesaplamalar tarayıcı içerisinde
+                    gerçekleştirilir.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs text-slate-400">
+                    Hedef Hash Algoritması
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-2">
+
+                    <button
+                      onClick={() => setAlgo('MD5')}
+                      className={`rounded-lg border py-2 text-xs font-medium transition ${
+                        algo === 'MD5'
+                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                          : 'border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      MD5
+                      <span className="block text-[10px] opacity-70">
+                        Hızlı / Güvensiz
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => setAlgo('ARGON2')}
+                      className={`rounded-lg border py-2 text-xs font-medium transition ${
+                        algo === 'ARGON2'
+                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                          : 'border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      Argon2id
+                      <span className="block text-[10px] opacity-70">
+                        Yavaş / Güvenli
+                      </span>
+                    </button>
+
+                  </div>
+                </div>
+
+                {/* METRİKLER */}
+
+                <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-950 p-4">
+
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400">
+                      Parola Uzunluğu
+                    </span>
+                    <span className="font-mono text-white">
+                      {entropy.length} karakter
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400">
+                      Karakter Havuzu
+                    </span>
+                    <span className="font-mono text-white">
+                      {entropy.poolSize} çeşit
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-400">
+                      Entropi
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {entropy.bits} bit
+                    </span>
+                  </div>
+
+                </div>
+
+              </div>
+            </section>
+
+            {/* SAĞ PANEL */}
+
+            <section className="space-y-6 rounded-xl border border-slate-800 bg-slate-900 p-6 lg:col-span-2">
+
+              <h2 className="border-b border-slate-800 pb-3 text-lg font-semibold text-emerald-400">
+                GPU Donanımlarına Karşı Dayanma Süresi
+              </h2>
+
+              <div className="space-y-4">
+
+                {/* GPU 1 */}
+
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+
+                  <div className="mb-2 flex items-center justify-between gap-4">
+
+                    <span className="text-sm text-slate-300">
+                      💻 Standart GPU
+                    </span>
+
+                    <span className="font-mono text-xs text-emerald-400">
+                      {formatCrackTime(timeSingleGpu)}
+                    </span>
+
+                  </div>
+
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-500"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (entropy.bits / 128) * 100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+
+                </div>
+
+                {/* GPU RIG */}
+
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+
+                  <div className="mb-2 flex items-center justify-between gap-4">
+
+                    <span className="text-sm text-slate-300">
+                      ⚡ GPU Rig
+                    </span>
+
+                    <span className="font-mono text-xs text-yellow-400">
+                      {formatCrackTime(timeRigGpu)}
+                    </span>
+
+                  </div>
+
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className="h-full bg-yellow-500 transition-all duration-500"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (entropy.bits / 128) * 80
+                        )}%`,
+                      }}
+                    />
+                  </div>
+
+                </div>
+
+                {/* DATA CENTER */}
+
+                <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+
+                  <div className="mb-2 flex items-center justify-between gap-4">
+
+                    <span className="text-sm text-slate-300">
+                      🏢 Büyük GPU Kümesi
+                    </span>
+
+                    <span className="font-mono text-xs text-rose-400">
+                      {formatCrackTime(timeDatacenter)}
+                    </span>
+
+                  </div>
+
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className="h-full bg-rose-500 transition-all duration-500"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (entropy.bits / 128) * 50
+                        )}%`,
+                      }}
+                    />
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-slate-950 p-4 text-xs leading-relaxed text-slate-400">
+                💡 <strong className="text-slate-200">
+                  Eğitim notu:
+                </strong>{' '}
+                Parola uzunluğu ve karakter çeşitliliği arttıkça
+                kaba kuvvet aramasındaki olası kombinasyon sayısı
+                üstel olarak büyür.
+              </div>
+
+            </section>
+
+          </div>
+        )}
+
+        {/* =========================
+            ATTACK / DEFENSE
+        ========================= */}
+
+        {activeTab === 'ATTACK_DEFENSE' && (
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+
+            <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+
+              <h2 className="mb-6 border-b border-slate-800 pb-3 text-lg font-semibold text-emerald-400">
+                Saldırı Vektörleri
+              </h2>
+
+              <div className="space-y-2">
+
+                {(
+                  [
+                    ['DDoS', '🌐 DDoS / Trafik Saldırısı'],
+                    ['SQLi', '💉 SQL Injection'],
+                    ['MitM', '🕵️ Man-in-the-Middle'],
+                  ] as [AttackType, string][]
+                ).map(([type, label]) => (
+
+                  <button
+                    key={type}
+                    onClick={() => setAttackType(type)}
+                    className={`w-full rounded-lg border p-3 text-left text-xs font-medium transition ${
+                      attackType === type
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
+                        : 'border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+
+                ))}
+
+              </div>
+
+              <div className="mt-6">
+
+                <label className="mb-2 block text-xs text-slate-400">
+                  Saldırı Şiddeti: %{intensity}
+                </label>
+
+                <input
+                  type="range"
+                  min="10"
+                  max="100"
+                  value={intensity}
+                  onChange={(e) =>
+                    setIntensity(Number(e.target.value))
+                  }
+                  className="w-full accent-emerald-500"
+                />
+
+              </div>
+
+              <div className="mt-6 border-t border-slate-800 pt-6">
+
+                <button
+                  onClick={() => setDefense(!defense)}
+                  className={`w-full rounded-lg py-3 text-xs font-semibold transition ${
+                    defense
+                      ? 'bg-emerald-500 text-slate-950'
+                      : 'border border-rose-500/50 bg-rose-500/20 text-rose-400'
+                  }`}
+                >
+                  {defense
+                    ? '🛡️ Savunma Kalkanı AKTİF'
+                    : '⚠️ Savunma Kalkanı KAPALI'}
+                </button>
+
+              </div>
+
+            </section>
+
+            <section className="flex flex-col rounded-xl border border-slate-800 bg-slate-900 p-6 lg:col-span-2">
+
+              <div className="mb-4 flex items-center justify-between gap-4 border-b border-slate-800 pb-3">
+
+                <h2 className="text-lg font-semibold text-emerald-400">
+                  Canlı Güvenlik Terminali
+                </h2>
+
+                <span
+                  className={`rounded border px-2 py-1 text-xs ${
+                    defense
+                      ? 'border-emerald-800 bg-emerald-950 text-emerald-400'
+                      : 'border-rose-800 bg-rose-950 text-rose-400'
+                  }`}
+                >
+                  {defense
+                    ? 'KORUMALI'
+                    : 'TEHDİT ALTINDA'}
+                </span>
+
+              </div>
+
+              <div className="h-72 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950 p-4 font-mono text-xs">
+
+                {logs.length === 0 && (
+                  <p className="text-slate-600">
+                    Terminal başlatılıyor...
+                  </p>
+                )}
+
+                {logs.map((log, index) => (
+
+                  <p
+                    key={`${log}-${index}`}
+                    className={`mb-2 ${
+                      log.includes('UYARI') ||
+                      log.includes('ZAFİYET') ||
+                      log.includes('MITM')
+                        ? 'text-rose-400'
+                        : 'text-emerald-400'
+                    }`}
+                  >
+                    {log}
+                  </p>
+
+                ))}
+
+              </div>
+
+              <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950 p-4 text-xs leading-relaxed text-slate-400">
+
+                {attackType === 'DDoS' &&
+                  (defense
+                    ? 'WAF ve rate limiting, aşırı istekleri sınırlandırmak için devrede.'
+                    : 'Yüksek trafik, uygulamanın kaynaklarını tüketerek erişilebilirliği etkileyebilir.')}
+
+                {attackType === 'SQLi' &&
+                  (defense
+                    ? 'Prepared Statements, kullanıcı girdisini SQL kodundan ayırmak için kullanılır.'
+                    : 'Kullanıcı girdisinin doğrudan sorguya eklenmesi SQL Injection riskini artırır.')}
+
+                {attackType === 'MitM' &&
+                  (defense
+                    ? 'TLS, istemci ile sunucu arasındaki iletişimi şifreleyerek trafiğin okunmasını zorlaştırır.'
+                    : 'Şifrelenmemiş HTTP trafiğinde gönderilen bilgiler ağ üzerinde görülebilir.')}
+
+              </div>
+
+            </section>
+
+          </div>
+        )}
+
+        {/* =========================
+            PHISHING
+        ========================= */}
+
+        {activeTab === 'PHISHING' && (
+          <section className="mx-auto max-w-3xl rounded-xl border border-slate-800 bg-slate-900 p-6">
+
+            <h2 className="mb-6 border-b border-slate-800 pb-3 text-lg font-semibold text-emerald-400">
+              Şüpheli Bağlantı Analizcisi
+            </h2>
+
+            <div>
+
+              <label className="mb-2 block text-xs text-slate-400">
+                Analiz Edilecek URL
+              </label>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+
+                <input
+                  type="text"
+                  value={testUrl}
+                  onChange={(e) =>
+                    setTestUrl(e.target.value)
+                  }
+                  className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 font-mono text-sm text-slate-200 outline-none focus:border-emerald-500"
+                />
+
+                <button
+                  onClick={analyzePhishing}
+                  className="rounded-lg bg-emerald-500 px-6 py-2 text-xs font-semibold text-slate-950 transition hover:bg-emerald-400"
+                >
+                  Tara
+                </button>
+
+              </div>
+
+            </div>
+
+            {phishingResult && (
+
+              <div className="mt-6 space-y-5 rounded-lg border border-slate-800 bg-slate-950 p-5">
+
+                <div className="flex items-center justify-between gap-4">
+
+                  <span className="text-xs text-slate-400">
+                    Risk Seviyesi
+                  </span>
+
+                  <span
+                    className={`rounded border px-3 py-1 text-sm font-bold ${
+                      phishingResult.score >= 70
+                        ? 'border-rose-800 bg-rose-950 text-rose-400'
+                        : phishingResult.score >= 40
+                        ? 'border-yellow-800 bg-yellow-950 text-yellow-400'
+                        : 'border-emerald-800 bg-emerald-950 text-emerald-400'
+                    }`}
+                  >
+                    %{phishingResult.score} · {phishingResult.risk}
+                  </span>
+
+                </div>
+
+                <div>
+
+                  <p className="mb-3 text-xs font-semibold text-slate-300">
+                    Risk Göstergeleri
+                  </p>
+
+                  {phishingResult.reasons.length === 0 ? (
+
+                    <p className="text-xs text-emerald-400">
+                      Belirgin bir risk göstergesi bulunamadı.
+                    </p>
+
+                  ) : (
+
+                    <ul className="space-y-2 text-xs text-slate-400">
+
+                      {phishingResult.reasons.map(
+                        (reason, index) => (
+                          <li
+                            key={index}
+                            className="flex gap-2"
+                          >
+                            <span className="text-emerald-500">
+                              →
+                            </span>
+                            <span>{reason}</span>
+                          </li>
+                        )
+                      )}
+
+                    </ul>
+
+                  )}
+
+                </div>
+
+                <p className="border-t border-slate-800 pt-4 text-[11px] leading-relaxed text-slate-500">
+                  
+                </p>
+
+              </div>
+
+            )}
+
+          </section>
+        )}
+
+      </main>
+
+      {/* FOOTER */}
+
+      <footer className="border-t border-slate-900 py-6 text-center text-[11px] text-slate-600">
+        CYBERLAB · Etkileşimli Siber Güvenlik Eğitim Laboratuvarı
+      </footer>
+
+    </div>
+  );
+}
